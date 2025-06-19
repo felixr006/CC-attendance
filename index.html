@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sunday School Attendance Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .record-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-indigo-700 mb-2">Sunday School Attendance</h1>
+            <p class="text-gray-600">Tracking God's children in His house</p>
+        </header>
+
+        <div class="flex flex-col lg:flex-row gap-8">
+            <!-- Attendance Form Section -->
+            <section class="lg:w-1/2 bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-6 border-b pb-2">Record Attendance</h2>
+                
+                <div id="form-status" class="hidden mb-4 p-3 rounded"></div>
+                
+                <form id="attendance-form" class="space-y-6">
+                    <div>
+                        <label for="student-name" class="block text-sm font-medium text-gray-700 mb-1">Child's Name</label>
+                        <input type="text" id="student-name" required class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="Enter child's full name">
+                    </div>
+                    
+                    <div>
+                        <label for="location" class="block text-sm font-medium text-gray-700 mb-1">Class Location</label>
+                        <select id="location" required class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="" disabled selected>Select a location</option>
+                            <option value="Sanctuary">Sanctuary</option>
+                            <option value="Fellowship Hall">Fellowship Hall</option>
+                            <option value="Main Classroom">Main Classroom</option>
+                            <option value="Outdoor Tent">Outdoor Tent</option>
+                            <option value="Youth Lounge">Youth Lounge</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        Submit Attendance
+                    </button>
+                </form>
+            </section>
+
+            <!-- Admin Dashboard Section -->
+            <section class="lg:w-1/2 bg-white rounded-lg shadow-md p-6 overflow-hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-semibold text-gray-800">Attendance Dashboard</h2>
+                    <button id="toggle-view" class="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200">Switch to Stats</button>
+                </div>
+
+                <!-- Records View -->
+                <div id="records-view">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-700">Recent Records</h3>
+                        <button id="clear-all" class="text-sm text-red-600 hover:text-red-800">Clear All Records</button>
+                    </div>
+                    
+                    <div id="records-container" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                        <!-- Records will be inserted here by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Stats View (hidden by default) -->
+                <div id="stats-view" class="hidden">
+                    <h3 class="text-lg font-medium text-gray-700 mb-4">Attendance Statistics</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <p class="text-sm text-blue-600 mb-1">Total Attendance</p>
+                            <p id="total-count" class="text-2xl font-bold text-blue-700">0</p>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg">
+                            <p class="text-sm text-green-600 mb-1">Today's Attendance</p>
+                            <p id="today-count" class="text-2xl font-bold text-green-700">0</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <p class="text-sm text-gray-700 mb-2">Attendance by Location</p>
+                        <div class="h-64">
+                            <canvas id="location-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // Initialize data storage
+        function getStoredRecords() {
+            const records = localStorage.getItem('sundaySchoolAttendance');
+            return records ? JSON.parse(records) : [];
+        }
+
+        // Save records to storage
+        function saveRecords(records) {
+            localStorage.setItem('sundaySchoolAttendance', JSON.stringify(records));
+            updateDashboard();
+        }
+
+        // Handle form submission
+        document.getElementById('attendance-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('student-name').value.trim();
+            const location = document.getElementById('location').value;
+            const now = new Date();
+            
+            const record = {
+                id: Date.now(),
+                name: name,
+                location: location,
+                date: now.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric',
+                    weekday: 'short'
+                }),
+                time: now.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }),
+                timestamp: now.getTime()
+            };
+            
+            const records = getStoredRecords();
+            records.unshift(record); // Add new record at the beginning
+            saveRecords(records);
+            
+            // Show success message
+            const statusDiv = document.getElementById('form-status');
+            statusDiv.textContent = `Attendance recorded for ${name} in ${location}`;
+            statusDiv.className = 'bg-green-100 text-green-700 mb-4 p-3 rounded fade-in';
+            statusDiv.classList.remove('hidden');
+            
+            // Clear form
+            e.target.reset();
+            
+            // Hide status after 3 seconds
+            setTimeout(() => {
+                statusDiv.classList.add('hidden');
+            }, 3000);
+        });
+
+        // Display records in the dashboard
+        function displayRecords() {
+            const records = getStoredRecords();
+            const container = document.getElementById('records-container');
+            container.innerHTML = '';
+            
+            if (records.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-4">No attendance records yet</p>';
+                return;
+            }
+            
+            records.forEach(record => {
+                const recordEl = document.createElement('div');
+                recordEl.className = 'bg-gray-50 p-3 rounded-md record-card transition-all hover:cursor-pointer';
+                recordEl.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium text-gray-800">${record.name}</p>
+                            <p class="text-sm text-gray-600">${record.location}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">${record.date}</p>
+                            <p class="text-xs text-gray-400">${record.time}</p>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex justify-end">
+                        <button data-id="${record.id}" class="delete-btn text-xs text-red-500 hover:text-red-700">Delete</button>
+                    </div>
+                `;
+                container.appendChild(recordEl);
+            });
+            
+            // Add event listeners to delete buttons
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const id = parseInt(this.getAttribute('data-id'));
+                    deleteRecord(id);
+                });
+            });
+        }
+
+        // Delete a record
+        function deleteRecord(id) {
+            const records = getStoredRecords().filter(record => record.id !== id);
+            saveRecords(records);
+        }
+
+        // Clear all records
+        document.getElementById('clear-all').addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete ALL attendance records?')) {
+                saveRecords([]);
+            }
+        });
+
+        // Update dashboard statistics
+        function updateStats() {
+            const records = getStoredRecords();
+            
+            // Update counts
+            document.getElementById('total-count').textContent = records.length;
+            
+            const today = new Date().toLocaleDateString();
+            const todayCount = records.filter(record => 
+                new Date(record.timestamp).toLocaleDateString() === today
+            ).length;
+            document.getElementById('today-count').textContent = todayCount;
+            
+            // Prepare data for chart
+            const locations = {
+                'Sanctuary': 0,
+                'Fellowship Hall': 0,
+                'Main Classroom': 0,
+                'Outdoor Tent': 0,
+                'Youth Lounge': 0
+            };
+            
+            records.forEach(record => {
+                if (locations.hasOwnProperty(record.location)) {
+                    locations[record.location]++;
+                }
+            });
+            
+            // Destroy existing chart if it exists
+            const chartEl = document.getElementById('location-chart');
+            if (window.locationChart) {
+                window.locationChart.destroy();
+            }
+            
+            // Create new chart
+            const ctx = chartEl.getContext('2d');
+            window.locationChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(locations),
+                    datasets: [{
+                        label: 'Attendance Count',
+                        data: Object.values(locations),
+                        backgroundColor: [
+                            'rgba(79, 70, 229, 0.7)',
+                            'rgba(99, 102, 241, 0.7)',
+                            'rgba(129, 140, 248, 0.7)',
+                            'rgba(165, 180, 252, 0.7)',
+                            'rgba(199, 210, 254, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(79, 70, 229, 1)',
+                            'rgba(99, 102, 241, 1)',
+                            'rgba(129, 140, 248, 1)',
+                            'rgba(165, 180, 252, 1)',
+                            'rgba(199, 210, 254, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update entire dashboard
+        function updateDashboard() {
+            displayRecords();
+            updateStats();
+        }
+
+        // Toggle between records and stats views
+        document.getElementById('toggle-view').addEventListener('click', function() {
+            const recordsView = document.getElementById('records-view');
+            const statsView = document.getElementById('stats-view');
+            
+            if (recordsView.classList.contains('hidden')) {
+                recordsView.classList.remove('hidden');
+                statsView.classList.add('hidden');
+                this.textContent = 'Switch to Stats';
+            } else {
+                recordsView.classList.add('hidden');
+                statsView.classList.remove('hidden');
+                this.textContent = 'View Records';
+            }
+        });
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDashboard();
+        });
+    </script>
+</body>
+</html>
